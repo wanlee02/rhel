@@ -1,0 +1,109 @@
+#!/bin/bash
+
+CHANNEL_NAME="$1"
+: ${CHANNEL_NAME:="mychannel"}
+
+ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/intellicode.com/orderers/orderer.intellicode.com/msp/tlscacerts/tlsca.intellicode.com-cert.pem
+
+PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.intellicode.com/peers/peer0.org1.intellicode.com/tls/ca.crt
+
+CC_SRC_PATH="github.com/chaincode/"
+#CC_SRC_PATH="/opt/gopath/src/github.com/chaincode/"
+
+instantiateChaincode() {
+  PEER=$1
+  ORG=$2
+  setGlobals $PEER $ORG
+  VERSION=${3:-1.0}
+
+  # while 'peer chaincode' command can get the orderer endpoint from the peer (if join was successful), 
+  # let's supply it directly as we know it using the "-o" option
+  set -x
+  peer chaincode instantiate -o orderer.intellicode.com:7050 -C $CHANNEL_NAME -n mycc -l ${LANGUAGE} -v ${VERSION} -c '{"Args":["init","a","100"]}' -P "AND ('Org1MSP.peer')" >&log.txt
+  res=$?
+  set +x
+  cat log.txt
+  verifyResult $res "Chaincode instantiation on peer${PEER}.org${ORG} on channel '$CHANNEL_NAME' failed"
+  echo "======== Chaincode is instantiated on peer${PEER}.org${ORG} on channel '$CHANNEL_NAME' =========="
+  echo
+}
+
+
+setGlobals() {
+  PEER=$1
+  ORG=$2
+  if [ $ORG -eq 1 ]; then
+    CORE_PEER_LOCALMSPID="Org1MSP"
+    CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.intellicode.com/users/Admin@org1.intellicode.com/msp
+    if [ $PEER -eq 0 ]; then
+      CORE_PEER_ADDRESS=peer0.org1.intellicode.com:7051
+    else
+      CORE_PEER_ADDRESS=peer1.org1.intellicode.com:8051
+    fi
+  else
+    echo "================== ERROR !!! ORG Unknown =================="
+  fi
+}
+
+
+chaincodeQuery() {
+  PEER=$1
+  ORG=$2
+  set -x
+  peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["query","a"]}' >&log.txt
+  set +x
+  cat log.txt
+  echo 
+}
+
+verifyResult() {
+  if [ $1 -ne 0 ]; then
+    echo "!!!!!!!!!!!!!!! "$2" !!!!!!!!!!!!!!!!"
+    echo "========= ERROR !!! FAILED to execute End-2-End Scenario ==========="
+    exit 1
+  fi
+}
+
+
+chaincodeInvoke() {
+  set -x
+  peer chaincode invoke -o orderer.intellicode.com:7050 -C $CHANNEL_NAME -n mycc -c '{"Args":["invoke","a","b","10"]}' >&log.txt
+  #peer chaincode invoke -o orderer.intellicode.com:7050 --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -c '{"Args":["invoke","a","b","10"]}' >&log.txt
+  res=$?
+  set +x
+  cat log.txt
+  echo $res
+  verifyResult $res "Invoke execution on $PEERS failed "
+  echo "========== Invoke transaction successful on $PEERS on channel '$CHANNEL_NAME' =========== "
+  echo
+}
+
+
+echo "---------- Querying chaincode on peer0.org1 ------------ "
+chaincodeQuery 0 1 
+echo 
+
+#echo "---------- Invoke chaincode on peer0.org1 -------------- "
+#chaincodeInvoke 0 1 
+
+sleep 3
+
+echo "---------- Querying chaincode on peer1.org1 ------------- "
+chaincodeQuery 1 1 
+echo
+
+echo "---------- Insert chaincode  -------------- "
+peer chaincode invoke -o orderer.intellicode.com:7050 --cafile $ORDERER_CA -C $CHANNEL_NAME -n mycc -c '{"Args":["insert","xx", "1000"]}' >& log.txt
+cat log.txt
+echo
+
+sleep 3
+
+echo "---------- Query chaincode  -------------- "
+peer chaincode query -C $CHANNEL_NAME -n mycc -c '{"Args":["query","xx"]}' >& log.txt
+cat log.txt
+echo
+
+echo "############# All GOOD, execution completed ###########  "
+echo
+

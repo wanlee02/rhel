@@ -1,0 +1,163 @@
+---
+## defines the different organizational identities which will be referenced later in the configuration.
+Organizations:
+    - &OrdererOrg
+        Name: OrdererOrg
+        # ID to load the MSP definition as
+        ID: OrdererMSP
+        # MSPDir is the filesystem path which contains the MSP configuration
+        MSPDir: crypto-config/ordererOrganizations/intellicode.com/msp
+
+        # Policies defines the set of policies at this level of the config tree
+        # their canonical path is usually /Channel/<Application|Orderer>/<OrgName>/<PolicyName>
+        Policies:
+            Readers:
+                Type: Signature
+                Rule: "OR('OrdererMSP.member')"
+            Writers:
+                Type: Signature
+                Rule: "OR('OrdererMSP.member')"
+            Admins:
+                Type: Signature
+                Rule: "OR('OrdererMSP.admin')"
+    - &Org1
+        Name: Org1MSP
+        ID: Org1MSP
+        MSPDir: crypto-config/peerOrganizations/org1.intellicode.com/msp
+        # their canonical path is usually /Channel/<Application|Orderer>/<OrgName>/<PolicyName>
+        Policies:
+            Readers:
+                Type: Signature
+                Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"
+            Writers:
+                Type: Signature
+                Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"
+            Admins:
+                Type: Signature
+                Rule: "OR('Org1MSP.admin')"
+
+        AnchorPeers:
+            # Defines the location of peers which can be used for cross org gossip communication.  
+            # this value is only encoded in the genesis block in the Application section context
+            - Host: peer0.org1.intellicode.com
+              Port: 7051
+
+
+Capabilities:
+    # Channel capabilities apply to both the orderers and the peers and must be supported by both.
+    # Set the value of the capability to true to require it.
+    Channel: &ChannelCapabilities
+        V1_4_3: true
+        V1_3: false
+    #    V1_3: true
+
+    Orderer: &OrdererCapabilities
+         V1_4_2: true
+         V1_1: false
+    #    V1_1: true
+
+    # apply only to the peer network, and may be safely used with prior release orderers.
+    Application: &ApplicationCapabilities
+        V1_4_2: true
+        V1_3: false
+    #    V1_3: true
+        V1_2: false
+        V1_1: false
+
+## defines the values to encode into a config transaction or genesis block for application related parameters
+Application: &ApplicationDefaults
+    Organizations:
+    # For Application policies, their canonical path is  /Channel/Application/<PolicyName>
+    Policies:
+        Readers:
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+        Writers:
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+        Admins:
+            Type: ImplicitMeta
+            Rule: "MAJORITY Admins"
+
+    Capabilities:
+        <<: *ApplicationCapabilities
+
+## defines the values to encode into a config transaction or
+Orderer: &OrdererDefaults
+    OrdererType: solo
+    Addresses:
+        - orderer.intellicode.com:7050
+
+    # Batch Timeout: The amount of time to wait before creating a batch
+    BatchTimeout: 2s
+    # Batch Size: Controls the number of messages batched into a block
+    BatchSize:
+        # Max Message Count: The maximum number of messages to permit in a batch
+        MaxMessageCount: 10
+
+        # The absolute maximum number of bytes allowed for the serialized messages in a batch.
+        AbsoluteMaxBytes: 99 MB
+
+        # A message larger than the preferred max bytes will result in a batch larger than preferred max bytes.
+        PreferredMaxBytes: 512 KB
+    Kafka:
+        # Brokers: A list of Kafka brokers to which the orderer connects
+        Brokers:
+            - 127.0.0.1:9092
+    Organizations:
+    # For Orderer policies, their canonical path is /Channel/Orderer/<PolicyName>
+    Policies:
+        Readers:
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+        Writers:
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+        Admins:
+            Type: ImplicitMeta
+            Rule: "MAJORITY Admins"
+        # specifies what signatures must be included in the block from the orderer for the peer to validate it.
+        BlockValidation:
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+
+## defines the values to encode into a config transaction or genesis block for channel related parameters.
+Channel: &ChannelDefaults
+    # For Channel policies, their canonical path is /Channel/<PolicyName>
+    Policies:
+        Readers: # Who may invoke the 'Deliver' API
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+        Writers: # Who may invoke the 'Broadcast' API
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+        Admins: # By default, who may modify elements at this config level
+            Type: ImplicitMeta
+            Rule: "MAJORITY Admins"
+    Capabilities:
+        <<: *ChannelCapabilities
+
+## Different configuration profiles may be encoded here to be specified as parameters to the configtxgen tool
+Profiles:
+    OrgsOrdererGenesis:
+        <<: *ChannelDefaults
+        Orderer:
+            <<: *OrdererDefaults
+            Organizations:
+                - *OrdererOrg
+            Capabilities:
+                <<: *OrdererCapabilities
+        Consortiums:
+            MyConsortium:
+                Organizations:
+                    - *Org1
+    OrgsChannel:
+        Consortium: MyConsortium
+        <<: *ChannelDefaults
+        Application:
+            <<: *ApplicationDefaults
+            Organizations:
+                - *Org1
+            Capabilities:
+                <<: *ApplicationCapabilities
+

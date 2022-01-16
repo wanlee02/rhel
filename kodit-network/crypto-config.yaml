@@ -1,0 +1,17 @@
+# "OrdererOrgs" - Definition of organizations managing orderer nodes
+OrdererOrgs:
+  - Name: Orderer
+    Domain: intellicode.com
+    Specs: # See PeerOrgs below for complete description
+      - Hostname: orderer
+
+# "PeerOrgs" - Definition of organizations managing peer nodes
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.intellicode.com
+    EnableNodeOUs: true
+    Template:
+      Count: 2  # number of peers
+    # Count: The number of user accounts _in addition_ to Admin
+    #Users:
+    #  Count: 1
